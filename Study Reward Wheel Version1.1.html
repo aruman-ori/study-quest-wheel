@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Study Quest: Reward Wheel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap');
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            touch-action: manipulation;
+            overflow-x: hidden;
+        }
+
+        .wheel-container {
+            position: relative;
+            width: 320px;
+            height: 320px;
+            margin: 20px auto;
+        }
+
+        #canvas {
+            width: 100%;
+            height: 100%;
+            transition: transform 4s cubic-bezier(0.15, 0, 0.15, 1);
+        }
+
+        .pointer {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 30px;
+            height: 40px;
+            background: #ef4444;
+            clip-path: polygon(50% 100%, 0 0, 100% 0);
+            z-index: 10;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+        }
+
+        .spin-btn {
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+        }
+
+        .spin-btn:disabled {
+            background: #475569;
+            box-shadow: none;
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        @keyframes premiumPulse {
+            0% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.7); }
+            70% { box-shadow: 0 0 0 20px rgba(168, 85, 247, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); }
+        }
+        
+        .pulse-active {
+            animation: premiumPulse 2s infinite;
+        }
+
+        .quest-card {
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            cursor: pointer;
+        }
+        
+        .quest-card.completed {
+            opacity: 0.5;
+            background: rgba(15, 23, 42, 0.8);
+            border-color: rgba(34, 197, 94, 0.3);
+            cursor: default;
+        }
+
+        .rarity-common { color: #94a3b8; }
+        .rarity-rare { color: #3b82f6; font-weight: bold; }
+        .rarity-legendary { color: #eab308; font-weight: bold; text-shadow: 0 0 10px rgba(234, 179, 8, 0.5); }
+
+        /* Confetti Animation */
+        .confetti {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            background-color: #f00;
+            z-index: 100;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155; 
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569; 
+        }
+    </style>
+</head>
+<body class="p-4 max-w-md mx-auto pb-20">
+
+    <!-- Header Stats -->
+    <div class="flex justify-between items-start mb-6 mt-4">
+        <div>
+            <div class="flex items-center gap-2 mb-1">
+                <h1 class="text-2xl font-800 tracking-tight leading-none">STUDY QUEST</h1>
+                <span class="bg-red-500/20 text-red-400 border border-red-500/50 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Demo V5</span>
+            </div>
+        </div>
+        <div class="text-right">
+            <div class="bg-indigo-600 px-3 py-1.5 rounded-full text-sm font-bold flex items-center gap-2 shadow-lg shadow-indigo-500/20">
+                <span id="token-count" class="text-lg">0</span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-200" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9 9a1 1 0 112 0v1a1 1 0 11-2 0V9zm1-7a1 1 0 00-1 1v.17a6.993 6.993 0 00-3.93 2.108 1 1 0 101.46 1.354 4.993 4.993 0 013.47-1.462V7a1 1 0 002 0V5.17a6.993 6.993 0 003.93-2.108 1 1 0 10-1.46-1.354 4.993 4.993 0 01-3.47 1.462V3a1 1 0 00-1-1z" clip-rule="evenodd" />
+                </svg>
+            </div>
+            <p class="text-[10px] text-slate-500 mt-1 uppercase font-semibold">Spin Tokens</p>
+        </div>
+    </div>
+
+    <!-- The Wheel Section -->
+    <div class="wheel-container">
+        <div class="pointer"></div>
+        <canvas id="canvas" width="400" height="400"></canvas>
+    </div>
+
+    <div class="text-center mb-8">
+        <div class="flex flex-col gap-3 items-center">
+            <button id="spin-button" class="spin-btn text-white font-bold py-4 px-12 rounded-2xl text-xl uppercase tracking-tighter transition-all transform active:scale-95 disabled:scale-100 w-full max-w-[280px]">
+                Spin 1x
+            </button>
+            <button id="spin-all-button" class="hidden bg-slate-700 hover:bg-slate-600 border border-slate-600 text-white font-bold py-2 px-8 rounded-xl text-sm uppercase tracking-tighter transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                Spin All
+            </button>
+        </div>
+        <p class="text-xs text-slate-400 mt-3 font-medium" id="status-msg">Complete quests to earn tokens!</p>
+    </div>
+
+    <!-- Real-Time Calendar Widget -->
+    <div class="mb-8 bg-slate-800/40 rounded-2xl p-4 border border-slate-700/50 shadow-inner">
+        <div class="flex justify-between items-end mb-4 px-1">
+            <div>
+                <h3 class="text-lg font-black text-f8fafc tracking-tight" id="current-date">--</h3>
+                <p class="text-sm text-indigo-400 font-semibold flex items-center gap-1 mt-0.5">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+                    </svg>
+                    <span id="current-time">--:--</span>
+                </p>
+            </div>
+        </div>
+        <div class="flex justify-between items-center gap-1 overflow-x-auto pb-1" id="week-calendar">
+            <!-- Calendar days will be injected here -->
+        </div>
+    </div>
+
+    <!-- Tabs Container -->
+    <div class="flex border-b border-slate-700 mb-4 relative">
+        <button onclick="switchTab('quests')" id="tab-quests" class="flex-1 py-2 text-sm font-bold border-b-2 border-indigo-500 text-indigo-400 transition-colors">Daily Quests</button>
+        <button onclick="switchTab('exchange')" id="tab-exchange" class="flex-1 py-2 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-300 transition-colors relative">
+            Exchange Shop
+            <span id="exchange-dot" class="hidden absolute top-2 right-4 w-2 h-2 bg-red-500 rounded-full animate-pulse shadow-[0_0_5px_rgba(239,68,68,0.8)]"></span>
+        </button>
+    </div>
+
+    <!-- Quest Log View Wrapper -->
+    <div id="view-quests-wrapper" class="space-y-6">
+        <!-- Daily Quests List -->
+        <div id="view-quests" class="space-y-3">
+            <!-- Quests will be injected here by JS -->
+        </div>
+    </div>
+
+    <!-- Exchange Shop View (Hidden by default) -->
+    <div id="view-exchange" class="hidden space-y-6">
+        <!-- Inventory -->
+        <div>
+            <h3 class="text-xs text-slate-400 uppercase tracking-widest mb-3 font-semibold">Your Inventory</h3>
+            <div id="inventory-grid" class="grid grid-cols-2 gap-2">
+                <!-- Inventory items injected here -->
+            </div>
+        </div>
+
+        <!-- Exchange Offers -->
+        <div>
+            <h3 class="text-xs text-slate-400 uppercase tracking-widest mb-3 font-semibold">Exchange Offers</h3>
+            <div id="shop-list" class="space-y-3">
+                <!-- Shop items injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Reward Result Modal (Hidden) -->
+    <div id="result-modal" class="fixed inset-0 bg-black/90 flex items-center justify-center z-50 hidden p-6 text-center backdrop-blur-sm transition-opacity">
+        <div class="bg-slate-900 border-2 border-indigo-500 p-8 rounded-3xl w-full max-w-sm shadow-2xl shadow-indigo-500/20 transform scale-100 transition-transform">
+            <div class="animate-bounce mb-2 text-4xl">🎁</div>
+            <p id="reward-header" class="text-indigo-400 text-xs uppercase tracking-widest font-bold mb-2">Item Acquired!</p>
+            <h3 id="reward-text" class="text-3xl font-black mb-2">REWARD NAME</h3>
+            <p id="reward-rarity" class="text-sm uppercase tracking-widest mb-4 font-semibold"></p>
+            <div id="multi-reward-list" class="hidden text-sm text-left bg-slate-800/80 border border-slate-700 p-3 rounded-xl mb-6 overflow-y-auto max-h-40 space-y-1"></div>
+            <button id="modal-close-btn" onclick="closeModal()" class="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold uppercase tracking-wider text-sm transition-colors">Add to Inventory</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Core Elements ---
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const spinBtn = document.getElementById('spin-button');
+        const spinAllBtn = document.getElementById('spin-all-button');
+        const tokenDisplay = document.getElementById('token-count');
+        const modal = document.getElementById('result-modal');
+        const rewardHeader = document.getElementById('reward-header');
+        const rewardText = document.getElementById('reward-text');
+        const rewardRarityText = document.getElementById('reward-rarity');
+        const multiRewardList = document.getElementById('multi-reward-list');
+        const questsContainer = document.getElementById('view-quests');
+        const modalCloseBtn = document.getElementById('modal-close-btn');
+        const exchangeDot = document.getElementById('exchange-dot');
+        
+        // --- Audio System (Web Audio API Synth) ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx;
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new AudioContext();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function playTone(freq, type, duration, vol=0.1) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        function playClick() { playTone(600, 'sine', 0.1, 0.05); }
+        function playTick() { playTone(800, 'triangle', 0.05, 0.02); }
+        function playWin() {
+            playTone(440, 'sine', 0.3, 0.1);
+            setTimeout(() => playTone(554, 'sine', 0.4, 0.1), 100);
+            setTimeout(() => playTone(659, 'sine', 0.5, 0.1), 200);
+        }
+        function playLegendary() {
+             playTone(440, 'square', 0.2, 0.1);
+             setTimeout(() => playTone(554, 'square', 0.2, 0.1), 150);
+             setTimeout(() => playTone(659, 'square', 0.2, 0.1), 300);
+             setTimeout(() => playTone(880, 'square', 0.6, 0.1), 450);
+        }
+
+        function simulateWheelTicks(durationMs) {
+            const ticks = 25;
+            for(let i=0; i<ticks; i++) {
+                // Easing curve so ticks slow down
+                let delay = durationMs * (1 - Math.pow(1 - (i/ticks), 3)); 
+                setTimeout(playTick, delay);
+            }
+        }
+
+        // Initialize audio on first user interaction anywhere
+        document.body.addEventListener('click', initAudio, { once: true });
+
+
+        // --- State Management & Local Storage ---
+        let tokens = 0;
+        let isSpinning = false;
+        let currentRotation = 0;
+        
+        // Calendar logic
+        let todayDateString = new Date().toDateString();
+        let selectedDateString = todayDateString;
+
+        let inventory = {
+            "5m Meditation": 0,
+            "Stretch Break": 0,
+            "10m Manga": 0,
+            "One Song": 0,
+            "5m Reddit": 0,
+            "15m YouTube": 0,
+            "Anime 1 Ep": 0,
+            "LEGENDARY: MOVIE": 0
+        };
+
+        const trades = [
+            { id: 1, costItem: "5m Meditation", costAmount: 20, rewardItem: "LEGENDARY: MOVIE" },
+            { id: 2, costItem: "Stretch Break", costAmount: 20, rewardItem: "LEGENDARY: MOVIE" },
+            { id: 3, costItem: "10m Manga", costAmount: 3, rewardItem: "Anime 1 Ep" },
+            { id: 4, costItem: "5m Reddit", costAmount: 3, rewardItem: "15m YouTube" }
+        ];
+
+        let questsByDate = {}; // Maps DateString -> Quests Array
+
+        // Default Quest Data Blueprint
+        function getDefaultQuests() {
+            return [
+                { id: 1, title: "Deep Work Session #1", desc: "Finish a 25min focus block", tokens: 1, isBoss: false, completed: false, userInput: "" },
+                { id: 2, title: "Deep Work Session #2", desc: "Finish a 25min focus block", tokens: 1, isBoss: false, completed: false, userInput: "" },
+                { id: 3, title: "Deep Work Session #3", desc: "Finish a 25min focus block", tokens: 1, isBoss: false, completed: false, userInput: "" },
+                { id: 4, title: "Deep Work Session #4", desc: "Finish a 25min focus block", tokens: 1, isBoss: false, completed: false, userInput: "" },
+                { id: 5, title: "Deep Work Session #5", desc: "Finish a 25min focus block", tokens: 1, isBoss: false, completed: false, userInput: "" },
+                { id: 6, title: "Slayer Elite Task #1", desc: "Complete 1 difficult problem set", tokens: 2, isBoss: false, completed: false, userInput: "" },
+                { id: 7, title: "Slayer Elite Task #2", desc: "Complete 1 difficult problem set", tokens: 2, isBoss: false, completed: false, userInput: "" },
+                { id: 8, title: "Review Notes", desc: "Spend 15 mins reviewing past notes", tokens: 1, isBoss: false, completed: false, userInput: "" },
+                { id: 9, title: "Boss Rush", desc: "Master a whole chapter / Finish project", tokens: 5, isBoss: true, completed: false, userInput: "" }
+            ];
+        }
+
+        // Reward Drop Table (Added custom weights)
+        const rewards = [
+            { text: "5m Meditation", rarity: "common", color: "#1e293b", weight: 20 },
+            { text: "10m Manga", rarity: "common", color: "#334155", weight: 12 },
+            { text: "One Song", rarity: "common", color: "#1e293b", weight: 12 },
+            { text: "15m YouTube", rarity: "rare", color: "#3b82f6", weight: 10 },
+            { text: "5m Reddit", rarity: "common", color: "#334155", weight: 12 },
+            { text: "Anime 1 Ep", rarity: "rare", color: "#3b82f6", weight: 10 },
+            { text: "Stretch Break", rarity: "common", color: "#1e293b", weight: 20 },
+            { text: "LEGENDARY: MOVIE", rarity: "legendary", color: "#eab308", weight: 4 }
+        ];
+
+        function saveData() {
+            const data = {
+                tokens: tokens,
+                inventory: inventory,
+                questsByDate: questsByDate,
+                lastSaved: todayDateString
+            };
+            localStorage.setItem('studyQuestData_v5', JSON.stringify(data));
+        }
+
+        function loadData() {
+            // First try loading v5 data
+            const saved = localStorage.getItem('studyQuestData_v5');
+            // Fallback for seamless migration from older version
+            const legacySaved = localStorage.getItem('studyQuestData_v4'); 
+
+            if (saved) {
+                const data = JSON.parse(saved);
+                tokens = data.tokens || 0;
+                inventory = { ...inventory, ...(data.inventory || {}) };
+                if (data.questsByDate) {
+                    questsByDate = data.questsByDate;
+                }
+            } else if (legacySaved) {
+                // Migrate user's old v4 data so they don't lose tokens
+                const data = JSON.parse(legacySaved);
+                tokens = data.tokens || 0;
+                inventory = { ...inventory, ...(data.inventory || {}) };
+                if (data.quests) {
+                    questsByDate[todayDateString] = data.quests;
+                }
+            }
+
+            // Ensure today exists
+            if (!questsByDate[todayDateString]) {
+                questsByDate[todayDateString] = getDefaultQuests();
+            }
+            saveData();
+        }
+
+        // --- Initialization ---
+        function init() {
+            loadData();
+            tokenDisplay.innerText = tokens;
+            
+            // Set up UI
+            updateDateTime();
+            renderCalendar();
+            renderQuests();
+            drawWheel();
+            updateButton();
+            renderInventory();
+            renderShop();
+            checkAffordable();
+            setInterval(updateDateTime, 1000); // Update clock every second
+        }
+
+        // --- Tab Logic ---
+        window.switchTab = function(tabName) {
+            playClick();
+            const btnQuests = document.getElementById('tab-quests');
+            const btnExchange = document.getElementById('tab-exchange');
+            const viewQuestsWrapper = document.getElementById('view-quests-wrapper');
+            const viewExchange = document.getElementById('view-exchange');
+
+            if (tabName === 'quests') {
+                btnQuests.className = "flex-1 py-2 text-sm font-bold border-b-2 border-indigo-500 text-indigo-400 transition-colors";
+                btnExchange.className = "flex-1 py-2 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-300 transition-colors relative";
+                viewQuestsWrapper.classList.remove('hidden');
+                viewExchange.classList.add('hidden');
+            } else {
+                btnExchange.className = "flex-1 py-2 text-sm font-bold border-b-2 border-indigo-500 text-indigo-400 transition-colors relative";
+                btnQuests.className = "flex-1 py-2 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-300 transition-colors";
+                viewExchange.classList.remove('hidden');
+                viewQuestsWrapper.classList.add('hidden');
+                renderInventory();
+                renderShop();
+            }
+        }
+
+        // --- Exchange, Affordability & Inventory Rendering ---
+        function checkAffordable() {
+            const canAfford = trades.some(t => inventory[t.costItem] >= t.costAmount);
+            if (canAfford) {
+                exchangeDot.classList.remove('hidden');
+            } else {
+                exchangeDot.classList.add('hidden');
+            }
+        }
+
+        function renderInventory() {
+            const grid = document.getElementById('inventory-grid');
+            grid.innerHTML = '';
+            
+            let hasItems = false;
+            for (const [item, count] of Object.entries(inventory)) {
+                if (count > 0) {
+                    hasItems = true;
+                    const rewardData = rewards.find(r => r.text === item);
+                    const colorClass = rewardData && rewardData.rarity === 'legendary' ? 'border-yellow-500 text-yellow-500' : 
+                                      (rewardData && rewardData.rarity === 'rare' ? 'border-blue-500 text-blue-400' : 'border-slate-600 text-slate-300');
+                    
+                    grid.insertAdjacentHTML('beforeend', `
+                        <div class="bg-slate-800/50 border ${colorClass} rounded-lg p-2 text-center relative mt-2 flex flex-col justify-between">
+                            <div>
+                                <span class="absolute -top-3 -right-2 bg-indigo-600 text-white text-xs font-black w-6 h-6 rounded-full flex items-center justify-center border-2 border-slate-900 shadow-md">${count}</span>
+                                <span class="text-xs font-semibold block mt-1">${item}</span>
+                            </div>
+                            <button onclick="useItem('${item}')" class="mt-2 w-full bg-slate-700 hover:bg-indigo-500 text-white text-[10px] font-bold py-1.5 rounded transition-colors uppercase tracking-wider">Use</button>
+                        </div>
+                    `);
+                }
+            }
+            if (!hasItems) {
+                grid.innerHTML = '<p class="text-sm text-slate-500 italic col-span-2 text-center py-4">Inventory is empty. Spin the wheel!</p>';
+            }
+        }
+
+        function renderShop() {
+            const list = document.getElementById('shop-list');
+            list.innerHTML = '';
+
+            trades.forEach(trade => {
+                const currentAmount = inventory[trade.costItem] || 0;
+                const canAfford = currentAmount >= trade.costAmount;
+                const rewardData = rewards.find(r => r.text === trade.rewardItem);
+                const isLegendary = rewardData && rewardData.rarity === 'legendary';
+
+                const html = `
+                    <div class="bg-slate-800/80 border border-slate-700 p-3 rounded-xl flex flex-col gap-2">
+                        <div class="flex justify-between items-center text-sm">
+                            <span class="text-slate-400 line-through decoration-red-500/50">${trade.costAmount}x ${trade.costItem}</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
+                            <span class="font-bold ${isLegendary ? 'text-yellow-500 drop-shadow-md' : 'text-blue-400'}">1x ${trade.rewardItem}</span>
+                        </div>
+                        <div class="flex justify-between items-center mt-1">
+                            <span class="text-xs font-semibold ${canAfford ? 'text-green-400' : 'text-slate-500'}">You have: ${currentAmount}</span>
+                            <button onclick="executeTrade(${trade.id})" class="px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${canAfford ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/30' : 'bg-slate-700 text-slate-500 cursor-not-allowed'}" ${!canAfford ? 'disabled' : ''}>Trade</button>
+                        </div>
+                    </div>
+                `;
+                list.insertAdjacentHTML('beforeend', html);
+            });
+        }
+
+        window.executeTrade = function(id) {
+            const trade = trades.find(t => t.id === id);
+            if (trade && inventory[trade.costItem] >= trade.costAmount) {
+                // Deduct & Add
+                inventory[trade.costItem] -= trade.costAmount;
+                inventory[trade.rewardItem] = (inventory[trade.rewardItem] || 0) + 1;
+                
+                saveData();
+                renderInventory();
+                renderShop();
+                checkAffordable();
+                
+                // Sound and UI
+                playWin();
+                rewardHeader.innerText = "Exchange Successful!";
+                multiRewardList.classList.add('hidden');
+                rewardText.innerText = trade.rewardItem;
+                rewardText.className = 'text-3xl font-black mb-1 text-green-400';
+                rewardRarityText.innerText = 'ADDED TO INVENTORY';
+                rewardRarityText.className = 'text-xs uppercase tracking-widest mb-8 font-bold text-green-400';
+                modalCloseBtn.innerText = "Awesome!";
+                modal.classList.remove('hidden');
+                createConfetti();
+            }
+        }
+
+        window.useItem = function(itemName) {
+            if (inventory[itemName] && inventory[itemName] > 0) {
+                playClick();
+                inventory[itemName]--;
+                saveData();
+                renderInventory();
+                renderShop();
+                checkAffordable();
+                
+                rewardHeader.innerText = "Item Consumed!";
+                multiRewardList.classList.add('hidden');
+                rewardText.innerText = itemName;
+                rewardText.className = 'text-3xl font-black mb-1 text-white';
+                rewardRarityText.innerText = 'ENJOY YOUR REWARD!';
+                rewardRarityText.className = 'text-xs uppercase tracking-widest mb-8 font-bold text-indigo-400';
+                modalCloseBtn.innerText = "Close";
+                modal.classList.remove('hidden');
+            }
+        }
+
+        // --- Real-Time Calendar Logic ---
+        function updateDateTime() {
+            const now = new Date();
+            const timeOpts = { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true };
+            const dateOpts = { weekday: 'long', month: 'long', day: 'numeric' };
+
+            // Update today logic if midnight crossed while app is open
+            const newDateString = now.toDateString();
+            if (newDateString !== todayDateString) {
+                todayDateString = newDateString;
+                if(!questsByDate[todayDateString]) {
+                    questsByDate[todayDateString] = getDefaultQuests();
+                    saveData();
+                }
+                renderCalendar();
+                // Auto switch to new day if they were on old today
+                if(selectedDateString === todayDateString) {
+                    renderQuests();
+                }
+            }
+
+            document.getElementById('current-time').innerText = now.toLocaleTimeString('en-US', timeOpts);
+            document.getElementById('current-date').innerText = now.toLocaleDateString('en-US', dateOpts);
+        }
+
+        window.selectCalendarDate = function(dateStr) {
+            playClick();
+            selectedDateString = dateStr;
+            
+            // Generate data for this day if it doesn't exist
+            if (!questsByDate[selectedDateString]) {
+                questsByDate[selectedDateString] = getDefaultQuests();
+                saveData();
+            }
+            
+            renderCalendar();
+            renderQuests();
+            switchTab('quests'); // Auto focus the quests view
+        };
+
+        function renderCalendar() {
+            const calendarContainer = document.getElementById('week-calendar');
+            calendarContainer.innerHTML = '';
+            
+            const today = new Date();
+            const currentDay = today.getDay();
+            
+            const startOfWeek = new Date(today);
+            startOfWeek.setDate(today.getDate() - currentDay);
+
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+            for (let i = 0; i < 7; i++) {
+                const loopDate = new Date(startOfWeek);
+                loopDate.setDate(startOfWeek.getDate() + i);
+                const loopDateStr = loopDate.toDateString();
+                
+                const isSelected = loopDateStr === selectedDateString;
+                const isToday = loopDateStr === todayDateString;
+                const dayName = days[i];
+                const dayNum = loopDate.getDate();
+
+                // Styling logic: Selected vs Today vs Default
+                let bgClass = "bg-slate-900/50 border border-slate-700/30 text-slate-400";
+                if (isSelected) {
+                    bgClass = "bg-indigo-600 shadow-lg shadow-indigo-500/30 transform scale-105 border-indigo-500 text-white";
+                } else if (isToday) {
+                    bgClass = "bg-slate-800 border border-indigo-400/50 text-slate-300";
+                }
+
+                const dayHtml = `
+                    <div onclick="selectCalendarDate('${loopDateStr}')" class="flex flex-col items-center justify-center py-2 px-1 rounded-xl flex-1 min-w-[40px] transition-all cursor-pointer hover:bg-indigo-500/30 ${bgClass}">
+                        <span class="text-[10px] uppercase font-bold mb-1 ${isSelected ? 'text-indigo-100' : (isToday ? 'text-indigo-300' : 'text-slate-500')}">${dayName}</span>
+                        <span class="text-sm font-black">${dayNum}</span>
+                    </div>
+                `;
+                calendarContainer.insertAdjacentHTML('beforeend', dayHtml);
+            }
+        }
+
+        // --- UI Rendering ---
+        function renderQuests() {
+            questsContainer.innerHTML = '';
+            
+            // Add Context Header for selected date
+            const selectedDateObj = new Date(selectedDateString);
+            const todayDateObj = new Date(todayDateString);
+            const isFuture = selectedDateObj > todayDateObj;
+            const isPast = selectedDateObj < todayDateObj;
+            const displayDate = selectedDateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+            
+            questsContainer.insertAdjacentHTML('beforeend', `
+                <div class="flex justify-between items-center mb-2 px-1">
+                    <h3 class="text-sm font-bold text-indigo-400">${displayDate}</h3>
+                    ${isFuture ? '<span class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-1 rounded uppercase font-bold tracking-wider border border-indigo-500/30">Planning Mode</span>' : ''}
+                    ${isPast ? '<span class="text-[10px] bg-red-500/20 text-red-400 px-2 py-1 rounded uppercase font-bold tracking-wider border border-red-500/30">Late Fine (-1 Token)</span>' : ''}
+                </div>
+            `);
+
+            const currentQuests = questsByDate[selectedDateString];
+
+            currentQuests.forEach(quest => {
+                const isCompleted = quest.completed;
+                const bossStyles = quest.isBoss ? "border-yellow-500/30" : "";
+                const bossTitleStyles = quest.isBoss ? "text-yellow-500" : "";
+                const bossTokenStyles = quest.isBoss ? "text-yellow-500" : "text-indigo-400";
+                
+                // Logic for disabling buttons on future dates
+                const disableComplete = isFuture;
+                let btnClass = isCompleted ? 'bg-black/20 text-slate-500 cursor-default' : 'bg-black/40 hover:bg-black/60 cursor-pointer hover:scale-105 shadow-md shadow-indigo-500/10';
+                if (disableComplete && !isCompleted) btnClass = 'bg-black/20 text-slate-500 cursor-not-allowed opacity-50';
+
+                const onClickAction = (isCompleted || disableComplete) ? '' : `completeQuest(${quest.id})`;
+                const earnedTokens = isPast ? Math.max(0, quest.tokens - 1) : quest.tokens;
+
+                const questHtml = `
+                    <div id="quest-${quest.id}" class="quest-card p-4 rounded-xl flex flex-col gap-3 transition-all ${bossStyles} ${isCompleted ? 'completed' : ''}">
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center gap-2">
+                                <p class="font-semibold ${bossTitleStyles} ${isCompleted ? 'line-through text-slate-500' : ''}">${quest.title}</p>
+                                ${isCompleted ? '<span class="bg-green-500/20 text-green-400 text-[10px] px-2 py-0.5 rounded">DONE</span>' : ''}
+                            </div>
+                            <button onclick="${onClickAction}" class="${bossTokenStyles} font-bold text-sm px-3 py-1.5 rounded-lg flex items-center gap-1 ${btnClass} transition-all">
+                                ${isPast ? `<span class="line-through text-slate-500 opacity-70 mr-0.5">${quest.tokens}</span>` : ''} +${earnedTokens} <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9 9a1 1 0 112 0v1a1 1 0 11-2 0V9zm1-7a1 1 0 00-1 1v.17a6.993 6.993 0 00-3.93 2.108 1 1 0 101.46 1.354 4.993 4.993 0 013.47-1.462V7a1 1 0 002 0V5.17a6.993 6.993 0 003.93-2.108 1 1 0 10-1.46-1.354 4.993 4.993 0 01-3.47 1.462V3a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+                            </button>
+                        </div>
+                        <input type="text" 
+                            value="${quest.userInput || ''}"
+                            oninput="updateQuestText(${quest.id}, this.value)"
+                            placeholder="E.g., ${quest.desc}" 
+                            class="w-full bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-slate-300 placeholder-slate-500/70 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none transition-all ${isCompleted ? 'opacity-50' : ''}" 
+                            ${isCompleted ? 'disabled' : ''}
+                        />
+                    </div>
+                `;
+                questsContainer.insertAdjacentHTML('beforeend', questHtml);
+            });
+        }
+
+        window.updateQuestText = function(id, val) {
+            const currentQuests = questsByDate[selectedDateString];
+            const quest = currentQuests.find(q => q.id === id);
+            if(quest) {
+                quest.userInput = val;
+                saveData(); // Save text input dynamically
+            }
+        }
+
+        // --- Logic ---
+        window.completeQuest = function(id) {
+            const currentQuests = questsByDate[selectedDateString];
+            const quest = currentQuests.find(q => q.id === id);
+            
+            if(quest && !quest.completed) {
+                playClick();
+                quest.completed = true;
+
+                // Calculate penalty
+                const isPast = new Date(selectedDateString) < new Date(todayDateString);
+                const earnedTokens = isPast ? Math.max(0, quest.tokens - 1) : quest.tokens;
+
+                tokens += earnedTokens;
+                tokenDisplay.innerText = tokens;
+                
+                saveData(); // Save state
+                
+                // Visual feedback
+                const el = document.getElementById(`quest-${id}`);
+                el.style.transform = 'scale(0.97)';
+                setTimeout(() => {
+                    renderQuests(); 
+                }, 150);
+
+                updateButton();
+            }
+        }
+
+        function updateButton() {
+            spinBtn.disabled = tokens <= 0 || isSpinning;
+            
+            // Pulse Animation logic
+            if (tokens > 0 && !isSpinning) {
+                spinBtn.classList.add('pulse-active');
+            } else {
+                spinBtn.classList.remove('pulse-active');
+            }
+            
+            if (tokens > 1) {
+                spinAllBtn.classList.remove('hidden');
+                spinAllBtn.innerText = `Spin All (${tokens}x)`;
+                spinAllBtn.disabled = isSpinning;
+            } else {
+                spinAllBtn.classList.add('hidden');
+            }
+
+            if (isSpinning) {
+                document.getElementById('status-msg').innerText = "Spinning...";
+            } else if (tokens > 0) {
+                document.getElementById('status-msg').innerHTML = `<span class="text-indigo-400">Ready to pull! You have ${tokens} token${tokens > 1 ? 's' : ''}.</span>`;
+            } else {
+                document.getElementById('status-msg').innerText = "Complete daily quests to earn tokens!";
+            }
+        }
+
+        function getWeightedRandomReward() {
+            const totalWeight = rewards.reduce((sum, reward) => sum + reward.weight, 0);
+            let randomNum = Math.random() * totalWeight;
+            for (let i = 0; i < rewards.length; i++) {
+                if (randomNum < rewards[i].weight) return rewards[i];
+                randomNum -= rewards[i].weight;
+            }
+            return rewards[0];
+        }
+
+        // --- Wheel Drawing ---
+        function drawWheel() {
+            const totalWeight = rewards.reduce((sum, reward) => sum + reward.weight, 0);
+            let currentAngle = 0;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            rewards.forEach((reward, i) => {
+                const sliceAngle = (reward.weight / totalWeight) * 2 * Math.PI;
+                
+                // Draw slice
+                ctx.beginPath();
+                ctx.fillStyle = reward.color;
+                ctx.moveTo(200, 200);
+                ctx.arc(200, 200, 190, currentAngle, currentAngle + sliceAngle);
+                ctx.fill();
+                ctx.strokeStyle = "rgba(255,255,255,0.05)";
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Draw text
+                ctx.save();
+                ctx.translate(200, 200);
+                ctx.rotate(currentAngle + sliceAngle / 2);
+                ctx.textAlign = "right";
+                ctx.fillStyle = "white";
+                
+                const fontSize = reward.weight <= 5 ? 11 : 14;
+                ctx.font = `bold ${fontSize}px Poppins`;
+                
+                ctx.fillText(reward.text, 170, 5);
+                ctx.restore();
+                
+                currentAngle += sliceAngle;
+            });
+
+            // Center circle decoration
+            ctx.beginPath();
+            ctx.fillStyle = "#0f172a";
+            ctx.arc(200, 200, 35, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.strokeStyle = "#4f46e5";
+            ctx.lineWidth = 6;
+            ctx.arc(200, 200, 35, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.fillStyle = "#818cf8";
+            ctx.arc(200, 200, 15, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // --- Gacha Logic ---
+        function spin() {
+            if (tokens <= 0 || isSpinning) return;
+
+            initAudio(); // Ensure audio context is running
+            tokens--;
+            tokenDisplay.innerText = tokens;
+            isSpinning = true;
+            saveData();
+            updateButton();
+
+            const extraSpins = 5 + Math.random() * 5; 
+            const spinAngle = extraSpins * 360;
+            currentRotation += spinAngle;
+            canvas.style.transform = `rotate(${currentRotation}deg)`;
+
+            simulateWheelTicks(4000); // Sound effect ticks
+
+            setTimeout(() => {
+                isSpinning = false;
+                
+                const actualDeg = currentRotation % 360;
+                const pointerAngleOnCanvas = (270 - actualDeg + 360) % 360;
+                
+                const totalWeight = rewards.reduce((sum, reward) => sum + reward.weight, 0);
+                let currentAngle = 0;
+                let winningIndex = 0;
+
+                for (let i = 0; i < rewards.length; i++) {
+                    const sliceAngle = (rewards[i].weight / totalWeight) * 360;
+                    if (pointerAngleOnCanvas >= currentAngle && pointerAngleOnCanvas < currentAngle + sliceAngle) {
+                        winningIndex = i;
+                        break;
+                    }
+                    currentAngle += sliceAngle;
+                }
+                
+                const wonItem = rewards[winningIndex];
+                
+                inventory[wonItem.text] = (inventory[wonItem.text] || 0) + 1;
+                saveData();
+                renderInventory(); 
+                renderShop(); 
+                checkAffordable();
+                
+                showResult(wonItem);
+                updateButton();
+            }, 4000); 
+        }
+
+        function spinAll() {
+            if (tokens <= 1 || isSpinning) return;
+            
+            initAudio();
+            const pulls = tokens;
+            tokens = 0;
+            tokenDisplay.innerText = tokens;
+            isSpinning = true;
+            saveData();
+            updateButton();
+
+            const extraSpins = 5 + Math.random() * 5; 
+            const spinAngle = extraSpins * 360;
+            currentRotation += spinAngle;
+            canvas.style.transform = `rotate(${currentRotation}deg)`;
+
+            simulateWheelTicks(4000);
+
+            setTimeout(() => {
+                isSpinning = false;
+                
+                const actualDeg = currentRotation % 360;
+                const pointerAngleOnCanvas = (270 - actualDeg + 360) % 360;
+                const totalWeight = rewards.reduce((sum, reward) => sum + reward.weight, 0);
+                let currentAngle = 0;
+                let winningIndex = 0;
+
+                for (let i = 0; i < rewards.length; i++) {
+                    const sliceAngle = (rewards[i].weight / totalWeight) * 360;
+                    if (pointerAngleOnCanvas >= currentAngle && pointerAngleOnCanvas < currentAngle + sliceAngle) {
+                        winningIndex = i;
+                        break;
+                    }
+                    currentAngle += sliceAngle;
+                }
+                
+                const visualWinner = rewards[winningIndex];
+                
+                let results = {};
+                results[visualWinner.text] = { count: 1, rarity: visualWinner.rarity };
+                inventory[visualWinner.text] = (inventory[visualWinner.text] || 0) + 1;
+
+                // Roll rest in background
+                for(let i = 1; i < pulls; i++) {
+                    const wonItem = getWeightedRandomReward();
+                    if(results[wonItem.text]) {
+                        results[wonItem.text].count++;
+                    } else {
+                        results[wonItem.text] = { count: 1, rarity: wonItem.rarity };
+                    }
+                    inventory[wonItem.text] = (inventory[wonItem.text] || 0) + 1;
+                }
+                
+                saveData();
+                renderInventory();
+                renderShop();
+                checkAffordable();
+                
+                showMultiResult(pulls, results);
+                updateButton();
+            }, 4000);
+        }
+
+        // --- Result Modal ---
+        function showResult(reward) {
+            if(reward.rarity === 'legendary') playLegendary();
+            else playWin();
+
+            rewardHeader.innerText = "Item Acquired!";
+            multiRewardList.classList.add('hidden');
+            modalCloseBtn.innerText = "Add to Inventory";
+            
+            rewardText.innerText = reward.text;
+            rewardText.className = `text-4xl font-black mb-1 rarity-${reward.rarity}`;
+            
+            rewardRarityText.innerText = `${reward.rarity} DROP`;
+            rewardRarityText.className = `text-xs uppercase tracking-widest mb-8 font-bold rarity-${reward.rarity}`;
+
+            modal.classList.remove('hidden');
+            if(reward.rarity !== 'common') createConfetti();
+        }
+
+        function showMultiResult(pulls, results) {
+            rewardHeader.innerText = "Multiple Items Acquired!";
+            rewardText.innerText = `x${pulls} PULLS`;
+            rewardText.className = `text-3xl font-black mb-1 text-white`;
+            rewardRarityText.innerText = `REWARDS SENT TO INVENTORY`;
+            rewardRarityText.className = `text-xs uppercase tracking-widest mb-4 font-bold text-slate-400`;
+            modalCloseBtn.innerText = "Add to Inventory";
+            
+            multiRewardList.innerHTML = '';
+            multiRewardList.classList.remove('hidden');
+            
+            let hasHighRarity = false;
+            let hasLegendary = false;
+
+            for(const [name, data] of Object.entries(results)) {
+                let colorClass = 'text-slate-300';
+                if(data.rarity === 'rare') { colorClass = 'text-blue-400 font-bold'; hasHighRarity = true; }
+                if(data.rarity === 'legendary') { colorClass = 'text-yellow-500 font-black drop-shadow-md'; hasHighRarity = true; hasLegendary = true; }
+                
+                multiRewardList.insertAdjacentHTML('beforeend', `
+                    <div class="flex justify-between items-center py-1.5 border-b border-slate-700 last:border-0">
+                        <span class="${colorClass}">${name}</span>
+                        <span class="bg-black/40 text-xs px-2 py-0.5 rounded font-bold text-slate-300">x${data.count}</span>
+                    </div>
+                `);
+            }
+            
+            if(hasLegendary) playLegendary();
+            else playWin();
+
+            modal.classList.remove('hidden');
+            if(hasHighRarity) createConfetti();
+        }
+
+        window.closeModal = function() {
+            playClick();
+            modal.classList.add('hidden');
+            const exchangeTab = document.getElementById('tab-exchange');
+            if (exchangeTab) {
+                exchangeTab.classList.add('text-indigo-400');
+                setTimeout(() => exchangeTab.classList.remove('text-indigo-400'), 500);
+            }
+        }
+
+        // --- VFX ---
+        function createConfetti() {
+            for(let i=0; i<60; i++) {
+                const conf = document.createElement('div');
+                conf.className = 'confetti rounded-full';
+                conf.style.left = Math.random() * 100 + 'vw';
+                conf.style.top = '-20px';
+                
+                const colors = ['#f87171', '#60a5fa', '#facc15', '#a78bfa', '#34d399'];
+                conf.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                
+                document.body.appendChild(conf);
+                
+                const anim = conf.animate([
+                    { transform: 'translateY(0) rotate(0) scale(1)', opacity: 1 },
+                    { transform: `translateY(100vh) rotate(${Math.random() * 720}deg) scale(${Math.random() * 1.5})`, opacity: 0 }
+                ], { 
+                    duration: 2500 + Math.random() * 3000,
+                    easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+                });
+                
+                anim.onfinish = () => conf.remove();
+            }
+        }
+
+        // Attach listeners and run
+        spinBtn.addEventListener('click', spin);
+        spinAllBtn.addEventListener('click', () => { playClick(); spinAll(); });
+        init();
+
+    </script>
+</body>
+</html>
