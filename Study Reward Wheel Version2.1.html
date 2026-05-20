@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Study Quest: Reward Wheel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap');
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            touch-action: manipulation;
+            overflow-x: hidden;
+        }
+
+        .wheel-container {
+            position: relative;
+            width: 320px;
+            height: 320px;
+            margin: 20px auto;
+        }
+
+        #canvas {
+            width: 100%;
+            height: 100%;
+            transition: transform 4s cubic-bezier(0.15, 0, 0.15, 1);
+        }
+
+        .pointer {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 30px;
+            height: 40px;
+            background: #ef4444;
+            clip-path: polygon(50% 100%, 0 0, 100% 0);
+            z-index: 10;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+        }
+
+        .spin-btn {
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+        }
+
+        .spin-btn:disabled {
+            background: #475569;
+            box-shadow: none;
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        @keyframes premiumPulse {
+            0% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.7); }
+            70% { box-shadow: 0 0 0 20px rgba(168, 85, 247, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); }
+        }
+        
+        .pulse-active {
+            animation: premiumPulse 2s infinite;
+        }
+
+        .quest-card {
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            cursor: pointer;
+        }
+        
+        .quest-card.completed {
+            opacity: 0.5;
+            background: rgba(15, 23, 42, 0.8);
+            border-color: rgba(34, 197, 94, 0.3);
+            cursor: default;
+        }
+
+        .rarity-common { color: #94a3b8; }
+        .rarity-rare { color: #3b82f6; font-weight: bold; }
+        .rarity-legendary { color: #eab308; font-weight: bold; text-shadow: 0 0 10px rgba(234, 179, 8, 0.5); }
+
+        .confetti {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            background-color: #f00;
+            z-index: 100;
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    </style>
+</head>
+<body class="p-4 pb-20">
+
+    <div class="max-w-6xl mx-auto flex justify-between items-start mb-6 mt-4">
+        <div>
+            <div class="flex items-center gap-2 mb-1">
+                <h1 class="text-2xl font-800 tracking-tight leading-none">STUDY QUEST</h1>
+                <span class="bg-red-500/20 text-red-400 border border-red-500/50 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">version 1.4</span>
+            </div>
+        </div>
+        <div class="text-right">
+            <div class="bg-indigo-600 px-3 py-1.5 rounded-full text-sm font-bold flex items-center gap-2 shadow-lg shadow-indigo-500/20">
+                <span id="token-count" class="text-lg">0</span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-200" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9 9a1 1 0 112 0v1a1 1 0 11-2 0V9zm1-7a1 1 0 00-1 1v.17a6.993 6.993 0 00-3.93 2.108 1 1 0 101.46 1.354 4.993 4.993 0 013.47-1.462V7a1 1 0 002 0V5.17a6.993 6.993 0 003.93-2.108 1 1 0 10-1.46-1.354 4.993 4.993 0 01-3.47 1.462V3a1 1 0 00-1-1z" clip-rule="evenodd" />
+                </svg>
+            </div>
+            <p class="text-[10px] text-slate-500 mt-1 uppercase font-semibold">Spin Tokens</p>
+        </div>
+    </div>
+
+    <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        <div class="lg:col-span-3 space-y-6 order-2 lg:order-1">
+            
+            <div class="bg-slate-800/40 rounded-2xl p-5 border border-slate-700/50 shadow-inner flex items-center gap-4">
+                <div class="bg-orange-500/20 p-3 rounded-full border border-orange-500/30 shadow-[0_0_15px_rgba(249,115,22,0.2)]">
+                    <span class="text-3xl">🔥</span>
+                </div>
+                <div>
+                    <h2 class="text-slate-400 text-xs font-bold uppercase tracking-widest">Current Streak</h2>
+                    <div class="flex items-baseline gap-1">
+                        <span id="streak-count" class="text-3xl font-black text-white">0</span>
+                        <span class="text-sm font-semibold text-slate-500">Days</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-slate-800/40 rounded-2xl p-5 border border-slate-700/50 shadow-inner text-center">
+                <h2 class="text-slate-400 text-xs font-bold uppercase tracking-widest mb-4">Focus Timer</h2>
+                
+                <div class="flex justify-center gap-2 mb-6">
+                    <button onclick="window.setPomodoroMode('focus')" id="btn-focus" class="text-[10px] font-bold px-3 py-1.5 rounded-md transition-colors bg-indigo-600 text-white">Focus</button>
+                    <button onclick="window.setPomodoroMode('shortBreak')" id="btn-short" class="text-[10px] font-bold px-3 py-1.5 rounded-md transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600">Short Break</button>
+                    <button onclick="window.setPomodoroMode('longBreak')" id="btn-long" class="text-[10px] font-bold px-3 py-1.5 rounded-md transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600">Long Break</button>
+                </div>
+
+                <div id="pomodoro-display" class="text-6xl font-black text-white tracking-tighter mb-6 drop-shadow-lg">25:00</div>
+                
+                <div class="flex gap-2 justify-center">
+                    <button onclick="window.togglePomodoro()" id="pomodoro-toggle" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-xl w-full transition-colors uppercase tracking-wider text-sm shadow-lg shadow-indigo-500/20">START</button>
+                    <button onclick="window.resetPomodoro()" class="bg-slate-700 hover:bg-slate-600 text-white font-bold p-2 rounded-xl transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="lg:col-span-6 flex flex-col items-center w-full order-1 lg:order-2">
+            
+            <div class="wheel-container">
+                <div class="pointer"></div>
+                <canvas id="canvas" width="400" height="400"></canvas>
+            </div>
+
+            <div class="text-center mb-8 w-full max-w-md">
+                <div class="flex flex-col gap-3 items-center">
+                    <button id="spin-button" class="spin-btn text-white font-bold py-4 px-12 rounded-2xl text-xl uppercase tracking-tighter transition-all transform active:scale-95 disabled:scale-100 w-full">
+                        Spin 1x
+                    </button>
+                    <button id="spin-all-button" class="hidden bg-slate-700 hover:bg-slate-600 border border-slate-600 text-white font-bold py-2 px-8 rounded-xl text-sm uppercase tracking-tighter transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                        Spin All
+                    </button>
+                </div>
+                <p class="text-xs text-slate-400 mt-3 font-medium" id="status-msg">Complete quests to earn tokens!</p>
+            </div>
+
+            <div class="mb-8 bg-slate-800/40 rounded-2xl p-4 border border-slate-700/50 shadow-inner w-full max-w-md">
+                <div class="flex justify-between items-center mb-4 px-1">
+                    <div class="flex items-center gap-3">
+                        <button onclick="window.toggleCalendarMode()" id="mode-toggle-btn" class="p-1.5 bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 rounded-lg hover:bg-indigo-600/40 transition-all group">
+                            <svg id="week-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+                            <svg id="month-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 10h16M10 4v16" /></svg>
+                        </button>
+                        <div>
+                            <h3 class="text-lg font-black text-f8fafc tracking-tight leading-tight" id="calendar-month-year">Month Year</h3>
+                            <p class="text-xs text-indigo-400 font-semibold flex items-center gap-1" id="current-time">--:--:--</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="window.changeCalendarNav(-1)" class="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                        </button>
+                        <button onclick="window.changeCalendarNav(1)" class="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-7 gap-1 mb-2">
+                    <div class="text-[10px] text-center font-bold text-slate-500">SUN</div>
+                    <div class="text-[10px] text-center font-bold text-slate-500">MON</div>
+                    <div class="text-[10px] text-center font-bold text-slate-500">TUE</div>
+                    <div class="text-[10px] text-center font-bold text-slate-500">WED</div>
+                    <div class="text-[10px] text-center font-bold text-slate-500">THU</div>
+                    <div class="text-[10px] text-center font-bold text-slate-500">FRI</div>
+                    <div class="text-[10px] text-center font-bold text-slate-500">SAT</div>
+                </div>
+                
+                <div class="grid grid-cols-7 gap-1 transition-all duration-300 overflow-hidden" id="calendar-grid">
+                    </div>
+            </div>
+
+            <div class="flex border-b border-slate-700 mb-4 relative w-full max-w-md">
+                <button onclick="window.switchTab('quests')" id="tab-quests" class="flex-1 py-2 text-sm font-bold border-b-2 border-indigo-500 text-indigo-400 transition-colors">Daily Quests</button>
+                <button onclick="window.switchTab('exchange')" id="tab-exchange" class="flex-1 py-2 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-300 transition-colors relative">
+                    Exchange Shop
+                    <span id="exchange-dot" class="hidden absolute top-2 right-4 w-2 h-2 bg-red-500 rounded-full animate-pulse shadow-[0_0_5px_rgba(239,68,68,0.8)]"></span>
+                </button>
+            </div>
+
+            <div id="view-quests-wrapper" class="space-y-6 w-full max-w-md">
+                <div id="view-quests" class="space-y-3">
+                    </div>
+            </div>
+
+            <div id="view-exchange" class="hidden space-y-6 w-full max-w-md">
+                <div>
+                    <h3 class="text-xs text-slate-400 uppercase tracking-widest mb-3 font-semibold">Your Inventory</h3>
+                    <div id="inventory-grid" class="grid grid-cols-2 gap-2"></div>
+                </div>
+                <div>
+                    <h3 class="text-xs text-slate-400 uppercase tracking-widest mb-3 font-semibold">Exchange Offers</h3>
+                    <div id="shop-list" class="space-y-3"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="lg:col-span-3 space-y-6 order-3 lg:order-3">
+            <div class="bg-slate-800/40 rounded-2xl p-5 border border-slate-700/50 shadow-inner">
+                <h2 class="text-slate-400 text-xs font-bold uppercase tracking-widest mb-4">Study Stats</h2>
+                
+                <div class="space-y-3">
+                    <div class="bg-slate-900/50 border border-slate-700/30 p-3 rounded-xl flex justify-between items-center">
+                        <span class="text-sm font-semibold text-slate-300">Today</span>
+                        <span id="stat-today" class="font-black text-indigo-400">0h 0m</span>
+                    </div>
+                    
+                    <div class="bg-slate-900/50 border border-slate-700/30 p-3 rounded-xl flex justify-between items-center">
+                        <span class="text-sm font-semibold text-slate-300">This Week</span>
+                        <span id="stat-week" class="font-black text-blue-400">0h 0m</span>
+                    </div>
+
+                    <div class="bg-slate-900/50 border border-slate-700/30 p-3 rounded-xl flex justify-between items-center">
+                        <span class="text-sm font-semibold text-slate-300">This Month</span>
+                        <span id="stat-month" class="font-black text-purple-400">0h 0m</span>
+                    </div>
+
+                    <div class="bg-slate-900/50 border border-slate-700/30 p-3 rounded-xl flex justify-between items-center">
+                        <span class="text-sm font-semibold text-slate-300">Lifetime</span>
+                        <span id="stat-lifetime" class="font-black text-yellow-500">0h 0m</span>
+                    </div>
+                </div>
+                <p class="text-[10px] text-slate-500 mt-4 text-center">Complete Focus Sessions to log time.</p>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="result-modal" class="fixed inset-0 bg-black/90 flex items-center justify-center z-50 hidden p-6 text-center backdrop-blur-sm transition-opacity">
+        <div class="bg-slate-900 border-2 border-indigo-500 p-8 rounded-3xl w-full max-w-sm shadow-2xl shadow-indigo-500/20 transform scale-100 transition-transform">
+            <div class="animate-bounce mb-2 text-4xl">🎁</div>
+            <p id="reward-header" class="text-indigo-400 text-xs uppercase tracking-widest font-bold mb-2">Item Acquired!</p>
+            <h3 id="reward-text" class="text-3xl font-black mb-2">REWARD NAME</h3>
+            <p id="reward-rarity" class="text-sm uppercase tracking-widest mb-4 font-semibold"></p>
+            <div id="multi-reward-list" class="hidden text-sm text-left bg-slate-800/80 border border-slate-700 p-3 rounded-xl mb-6 overflow-y-auto max-h-40 space-y-1"></div>
+            <button id="modal-close-btn" onclick="window.closeModal()" class="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold uppercase tracking-wider text-sm transition-colors">Add to Inventory</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            // --- Core Elements ---
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            const spinBtn = document.getElementById('spin-button');
+            const spinAllBtn = document.getElementById('spin-all-button');
+            const tokenDisplay = document.getElementById('token-count');
+            const modal = document.getElementById('result-modal');
+            const rewardHeader = document.getElementById('reward-header');
+            const rewardText = document.getElementById('reward-text');
+            const rewardRarityText = document.getElementById('reward-rarity');
+            const multiRewardList = document.getElementById('multi-reward-list');
+            const questsContainer = document.getElementById('view-quests');
+            const modalCloseBtn = document.getElementById('modal-close-btn');
+            const exchangeDot = document.getElementById('exchange-dot');
+
+            // --- Audio System ---
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            let audioCtx;
+
+            function initAudio() {
+                if (!audioCtx) audioCtx = new AudioContext();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+            }
+
+            function playTone(freq, type, duration, vol=0.1) {
+                if (!audioCtx) return;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            }
+
+            function playClick() { playTone(600, 'sine', 0.1, 0.05); }
+            function playTick() { playTone(800, 'triangle', 0.05, 0.02); }
+            function playWin() {
+                playTone(440, 'sine', 0.3, 0.1);
+                setTimeout(() => playTone(554, 'sine', 0.4, 0.1), 100);
+                setTimeout(() => playTone(659, 'sine', 0.5, 0.1), 200);
+            }
+            function playLegendary() {
+                 playTone(440, 'square', 0.2, 0.1);
+                 setTimeout(() => playTone(554, 'square', 0.2, 0.1), 150);
+                 setTimeout(() => playTone(659, 'square', 0.2, 0.1), 300);
+                 setTimeout(() => playTone(880, 'square', 0.6, 0.1), 450);
+            }
+            function playAlarm() {
+                let time = audioCtx.currentTime;
+                for(let i=0; i<3; i++) {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'sine'; osc.frequency.value = 880;
+                    gain.gain.setValueAtTime(0.2, time);
+                    gain.gain.exponentialRampToValueAtTime(0.01, time + 0.5);
+                    osc.connect(gain); gain.connect(audioCtx.destination);
+                    osc.start(time); osc.stop(time + 0.5);
+                    time += 0.8;
+                }
+            }
+
+            function simulateWheelTicks(durationMs) {
+                const ticks = 25;
+                for(let i=0; i<ticks; i++) {
+                    let delay = durationMs * (1 - Math.pow(1 - (i/ticks), 3)); 
+                    setTimeout(playTick, delay);
+                }
+            }
+
+            document.body.addEventListener('click', initAudio, { once: true });
+
+            // --- State Management ---
+            let tokens = 0;
+            let isSpinning = false;
+            let currentRotation = 0;
+            
+            let todayDate = new Date();
+            let todayDateString = todayDate.toDateString();
+            let selectedDateString = todayDateString;
+            
+            let viewingMonth = todayDate.getMonth();
+            let viewingYear = todayDate.getFullYear();
+            let calendarMode = 'month';
+
+            let inventory = {
+                "5m Meditation": 0, "Stretch Break": 0, "10m Manga": 0, "One Song": 0,
+                "5m Reddit": 0, "15m YouTube": 0, "Anime 1 Ep": 0, "LEGENDARY: MOVIE": 0
+            };
+
+            const trades = [
+                { id: 1, costItem: "5m Meditation", costAmount: 20, rewardItem: "LEGENDARY: MOVIE" },
+                { id: 2, costItem: "Stretch Break", costAmount: 20, rewardItem: "LEGENDARY: MOVIE" },
+                { id: 3, costItem: "10m Manga", costAmount: 3, rewardItem: "Anime 1 Ep" },
+                { id: 4, costItem: "5m Reddit", costAmount: 3, rewardItem: "15m YouTube" }
+            ];
+
+            let questsByDate = {}; 
+            
+            // New State for Stats & Streaks
+            let studyStats = { lifetime: 0, byDate: {} };
+            let streak = { count: 0, lastDate: null };
+
+            function getDefaultQuests() {
+                return [
+                    { id: 1, title: "Deep Work Session #1", desc: "Finish a 25min focus block", tokens: 1, isBoss: false, completed: false, userInput: "" },
+                    { id: 2, title: "Deep Work Session #2", desc: "Finish a 25min focus block", tokens: 1, isBoss: false, completed: false, userInput: "" },
+                    { id: 3, title: "Deep Work Session #3", desc: "Finish a 25min focus block", tokens: 1, isBoss: false, completed: false, userInput: "" },
+                    { id: 4, title: "Deep Work Session #4", desc: "Finish a 25min focus block", tokens: 1, isBoss: false, completed: false, userInput: "" },
+                    { id: 5, title: "Deep Work Session #5", desc: "Finish a 25min focus block", tokens: 1, isBoss: false, completed: false, userInput: "" },
+                    { id: 6, title: "Slayer Elite Task #1", desc: "Complete 1 difficult problem set", tokens: 2, isBoss: false, completed: false, userInput: "" },
+                    { id: 7, title: "Slayer Elite Task #2", desc: "Complete 1 difficult problem set", tokens: 2, isBoss: false, completed: false, userInput: "" },
+                    { id: 8, title: "Review Notes", desc: "Spend 15 mins reviewing past notes", tokens: 1, isBoss: false, completed: false, userInput: "" },
+                    { id: 9, title: "Boss Rush", desc: "Master a whole chapter / Finish project", tokens: 5, isBoss: true, completed: false, userInput: "" }
+                ];
+            }
+
+            const rewards = [
+                { text: "5m Meditation", rarity: "common", color: "#1e293b", weight: 20 },
+                { text: "10m Manga", rarity: "common", color: "#334155", weight: 12 },
+                { text: "One Song", rarity: "common", color: "#1e293b", weight: 12 },
+                { text: "15m YouTube", rarity: "rare", color: "#3b82f6", weight: 10 },
+                { text: "5m Reddit", rarity: "common", color: "#334155", weight: 12 },
+                { text: "Anime 1 Ep", rarity: "rare", color: "#3b82f6", weight: 10 },
+                { text: "Stretch Break", rarity: "common", color: "#1e293b", weight: 20 },
+                { text: "LEGENDARY: MOVIE", rarity: "legendary", color: "#eab308", weight: 4 }
+            ];
+
+            function saveData() {
+                const data = {
+                    tokens: tokens,
+                    inventory: inventory,
+                    questsByDate: questsByDate,
+                    studyStats: studyStats,
+                    streak: streak,
+                    lastSaved: todayDateString
+                };
+                localStorage.setItem('studyQuestData_v6', JSON.stringify(data));
+            }
+
+            function updateTokenDisplay() {
+                tokenDisplay.innerText = Number.isInteger(tokens) ? tokens : tokens.toFixed(1);
+            }
+
+            function loadData() {
+                try {
+                    const saved = localStorage.getItem('studyQuestData_v6');
+                    const legacySaved = localStorage.getItem('studyQuestData_v5'); 
+
+                    if (saved) {
+                        const data = JSON.parse(saved);
+                        tokens = data.tokens || 0;
+                        inventory = { ...inventory, ...(data.inventory || {}) };
+                        if (data.questsByDate) questsByDate = data.questsByDate;
+                        if (data.studyStats) studyStats = data.studyStats;
+                        if (data.streak) streak = data.streak;
+                    } else if (legacySaved) {
+                        const data = JSON.parse(legacySaved);
+                        tokens = data.tokens || 0;
+                        inventory = { ...inventory, ...(data.inventory || {}) };
+                        if (data.questsByDate) questsByDate = data.questsByDate;
+                    }
+
+                    if (!questsByDate[todayDateString]) questsByDate[todayDateString] = getDefaultQuests();
+                    
+                    // Process Streak
+                    checkStreak();
+                    
+                    saveData();
+                } catch(e) {
+                    console.error("Failed to load local storage data:", e);
+                    questsByDate[todayDateString] = getDefaultQuests();
+                }
+            }
+
+            function getLateFine(quest) {
+                if (quest.isBoss) return 3;
+                if (quest.title.includes("Slayer Elite Task")) return 1;
+                return 0.5;
+            }
+
+            // --- Stats & Streak Logic ---
+            function checkStreak() {
+                if (!streak.lastDate) return;
+                
+                const last = new Date(streak.lastDate);
+                const today = new Date(todayDateString);
+                const diffTime = Math.abs(today - last);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+                
+                if (diffDays > 1 && today > last) {
+                    streak.count = 0; // Reset streak if missed a day
+                }
+            }
+
+            function updateStreakAction() {
+                if (streak.lastDate !== todayDateString) {
+                    streak.count++;
+                    streak.lastDate = todayDateString;
+                    saveData();
+                }
+                document.getElementById('streak-count').innerText = streak.count;
+            }
+
+            function formatTime(minutes) {
+                const h = Math.floor(minutes / 60);
+                const m = minutes % 60;
+                return `${h}h ${m}m`;
+            }
+
+            function calculateStats() {
+                let todayMinutes = studyStats.byDate[todayDateString] || 0;
+                
+                // This Week
+                let weekMinutes = 0;
+                const today = new Date(todayDateString);
+                const dayOfWeek = today.getDay(); 
+                const startOfWeek = new Date(today);
+                startOfWeek.setDate(today.getDate() - dayOfWeek);
+                
+                for(let i = 0; i < 7; i++) {
+                    const d = new Date(startOfWeek);
+                    d.setDate(startOfWeek.getDate() + i);
+                    weekMinutes += (studyStats.byDate[d.toDateString()] || 0);
+                }
+
+                // This Month
+                let monthMinutes = 0;
+                const month = today.getMonth();
+                const year = today.getFullYear();
+                for (let dateStr in studyStats.byDate) {
+                    const d = new Date(dateStr);
+                    if (d.getMonth() === month && d.getFullYear() === year) {
+                        monthMinutes += studyStats.byDate[dateStr];
+                    }
+                }
+
+                document.getElementById('stat-today').innerText = formatTime(todayMinutes);
+                document.getElementById('stat-week').innerText = formatTime(weekMinutes);
+                document.getElementById('stat-month').innerText = formatTime(monthMinutes);
+                document.getElementById('stat-lifetime').innerText = formatTime(studyStats.lifetime);
+                document.getElementById('streak-count').innerText = streak.count;
+            }
+
+            function addStudyTime(minutes) {
+                studyStats.lifetime += minutes;
+                studyStats.byDate[todayDateString] = (studyStats.byDate[todayDateString] || 0) + minutes;
+                updateStreakAction();
+                calculateStats();
+                saveData();
+            }
+
+            // --- Pomodoro Logic ---
+            const P_MODES = { focus: 25 * 60, shortBreak: 5 * 60, longBreak: 15 * 60 };
+            let currentPMode = 'focus';
+            let pTimeLeft = P_MODES.focus;
+            let pTimer = null;
+            let isPRunning = false;
+
+            function updatePomodoroUI() {
+                const m = Math.floor(pTimeLeft / 60).toString().padStart(2, '0');
+                const s = (pTimeLeft % 60).toString().padStart(2, '0');
+                document.getElementById('pomodoro-display').innerText = `${m}:${s}`;
+                
+                const btnToggle = document.getElementById('pomodoro-toggle');
+                btnToggle.innerText = isPRunning ? "PAUSE" : "START";
+                btnToggle.className = isPRunning 
+                    ? "bg-orange-500 hover:bg-orange-400 text-white font-bold py-2 px-6 rounded-xl w-full transition-colors uppercase tracking-wider text-sm shadow-lg shadow-orange-500/20"
+                    : "bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-xl w-full transition-colors uppercase tracking-wider text-sm shadow-lg shadow-indigo-500/20";
+            }
+
+            window.setPomodoroMode = function(mode) {
+                if(isPRunning) return; // Prevent changing mode while running
+                playClick();
+                currentPMode = mode;
+                pTimeLeft = P_MODES[mode];
+                
+                // Update Button Styles
+                document.getElementById('btn-focus').className = mode === 'focus' ? "text-[10px] font-bold px-3 py-1.5 rounded-md transition-colors bg-indigo-600 text-white" : "text-[10px] font-bold px-3 py-1.5 rounded-md transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600";
+                document.getElementById('btn-short').className = mode === 'shortBreak' ? "text-[10px] font-bold px-3 py-1.5 rounded-md transition-colors bg-blue-500 text-white" : "text-[10px] font-bold px-3 py-1.5 rounded-md transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600";
+                document.getElementById('btn-long').className = mode === 'longBreak' ? "text-[10px] font-bold px-3 py-1.5 rounded-md transition-colors bg-purple-500 text-white" : "text-[10px] font-bold px-3 py-1.5 rounded-md transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600";
+                
+                updatePomodoroUI();
+            };
+
+            window.togglePomodoro = function() {
+                initAudio();
+                playClick();
+                if (isPRunning) {
+                    clearInterval(pTimer);
+                    isPRunning = false;
+                } else {
+                    isPRunning = true;
+                    pTimer = setInterval(() => {
+                        pTimeLeft--;
+                        updatePomodoroUI();
+                        if (pTimeLeft <= 0) {
+                            clearInterval(pTimer);
+                            isPRunning = false;
+                            playAlarm();
+                            
+                            // If focus session completed, log time (convert sec to min)
+                            if(currentPMode === 'focus') {
+                                addStudyTime(P_MODES.focus / 60);
+                            }
+                            
+                            // Auto switch modes
+                            if(currentPMode === 'focus') window.setPomodoroMode('shortBreak');
+                            else window.setPomodoroMode('focus');
+                        }
+                    }, 1000);
+                }
+                updatePomodoroUI();
+            };
+
+            window.resetPomodoro = function() {
+                playClick();
+                clearInterval(pTimer);
+                isPRunning = false;
+                pTimeLeft = P_MODES[currentPMode];
+                updatePomodoroUI();
+            };
+
+
+            // --- Initialization ---
+            function init() {
+                loadData();
+                updateTokenDisplay();
+                updateDateTime();
+                renderCalendar();
+                renderQuests();
+                drawWheel();
+                updateButton();
+                renderInventory();
+                renderShop();
+                checkAffordable();
+                calculateStats();
+                updatePomodoroUI();
+                setInterval(updateDateTime, 1000); 
+            }
+
+            // Global functions attached to window for HTML onclick handlers
+            window.toggleCalendarMode = function() {
+                playClick();
+                calendarMode = calendarMode === 'month' ? 'week' : 'month';
+                const weekIcon = document.getElementById('week-icon');
+                const monthIcon = document.getElementById('month-icon');
+                if (calendarMode === 'week') {
+                    weekIcon.classList.add('hidden');
+                    monthIcon.classList.remove('hidden');
+                } else {
+                    weekIcon.classList.remove('hidden');
+                    monthIcon.classList.add('hidden');
+                }
+                renderCalendar();
+            };
+
+            function renderCalendar() {
+                const grid = document.getElementById('calendar-grid');
+                const monthYearHeader = document.getElementById('calendar-month-year');
+                grid.innerHTML = '';
+
+                const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+                monthYearHeader.innerText = `${monthNames[viewingMonth]} ${viewingYear}`;
+
+                if (calendarMode === 'month') {
+                    const firstDay = new Date(viewingYear, viewingMonth, 1).getDay();
+                    const daysInMonth = new Date(viewingYear, viewingMonth + 1, 0).getDate();
+
+                    for (let i = 0; i < firstDay; i++) {
+                        grid.insertAdjacentHTML('beforeend', `<div class="p-2 opacity-0 pointer-events-none"></div>`);
+                    }
+                    for (let day = 1; day <= daysInMonth; day++) {
+                        const loopDate = new Date(viewingYear, viewingMonth, day);
+                        renderCalendarDay(grid, loopDate, day);
+                    }
+                } else {
+                    const baseDate = new Date(selectedDateString);
+                    const dayOfWeek = baseDate.getDay();
+                    const startOfWeek = new Date(baseDate);
+                    startOfWeek.setDate(baseDate.getDate() - dayOfWeek);
+
+                    for (let i = 0; i < 7; i++) {
+                        const loopDate = new Date(startOfWeek);
+                        loopDate.setDate(startOfWeek.getDate() + i);
+                        renderCalendarDay(grid, loopDate, loopDate.getDate());
+                    }
+                }
+            }
+
+            function renderCalendarDay(container, date, dayNum) {
+                const dateStr = date.toDateString();
+                const isSelected = dateStr === selectedDateString;
+                const isToday = dateStr === todayDateString;
+
+                let bgClass = "bg-slate-900/50 border border-slate-700/30 text-slate-400";
+                let textClass = "text-slate-300";
+                
+                if (isSelected) {
+                    bgClass = "bg-indigo-600 shadow-md shadow-indigo-500/30 transform scale-105 border-indigo-500 text-white z-10";
+                    textClass = "text-white font-black";
+                } else if (isToday) {
+                    bgClass = "bg-slate-800 border-2 border-indigo-400/50";
+                    textClass = "text-indigo-400 font-bold";
+                }
+
+                container.insertAdjacentHTML('beforeend', `
+                    <div onclick="window.selectCalendarDate('${dateStr}')" 
+                         class="flex flex-col items-center justify-center p-2 rounded-lg transition-all cursor-pointer hover:bg-indigo-500/20 ${bgClass}">
+                        <span class="text-xs ${textClass}">${dayNum}</span>
+                    </div>
+                `);
+            }
+
+            window.changeCalendarNav = function(offset) {
+                playClick();
+                if (calendarMode === 'month') {
+                    viewingMonth += offset;
+                    if (viewingMonth > 11) { viewingMonth = 0; viewingYear++; }
+                    if (viewingMonth < 0) { viewingMonth = 11; viewingYear--; }
+                } else {
+                    const newDate = new Date(selectedDateString);
+                    newDate.setDate(newDate.getDate() + (offset * 7));
+                    selectedDateString = newDate.toDateString();
+                    viewingMonth = newDate.getMonth();
+                    viewingYear = newDate.getFullYear();
+                    if (!questsByDate[selectedDateString]) {
+                        questsByDate[selectedDateString] = getDefaultQuests();
+                        saveData();
+                    }
+                    renderQuests();
+                }
+                renderCalendar();
+            };
+
+            window.selectCalendarDate = function(dateStr) {
+                playClick();
+                selectedDateString = dateStr;
+                const d = new Date(dateStr);
+                viewingMonth = d.getMonth();
+                viewingYear = d.getFullYear();
+
+                if (!questsByDate[selectedDateString]) {
+                    questsByDate[selectedDateString] = getDefaultQuests();
+                    saveData();
+                }
+                renderCalendar();
+                renderQuests();
+                window.switchTab('quests'); 
+            };
+
+            function updateDateTime() {
+                const now = new Date();
+                const newDateString = now.toDateString();
+                if (newDateString !== todayDateString) {
+                    todayDateString = newDateString;
+                    if(!questsByDate[todayDateString]) {
+                        questsByDate[todayDateString] = getDefaultQuests();
+                        saveData();
+                    }
+                    renderCalendar();
+                    if(selectedDateString === todayDateString) renderQuests();
+                    checkStreak();
+                    calculateStats();
+                }
+                document.getElementById('current-time').innerText = now.toLocaleTimeString();
+            }
+
+            window.switchTab = function(tabName) {
+                playClick();
+                const btnQuests = document.getElementById('tab-quests');
+                const btnExchange = document.getElementById('tab-exchange');
+                const viewQuestsWrapper = document.getElementById('view-quests-wrapper');
+                const viewExchange = document.getElementById('view-exchange');
+
+                if (tabName === 'quests') {
+                    btnQuests.className = "flex-1 py-2 text-sm font-bold border-b-2 border-indigo-500 text-indigo-400 transition-colors";
+                    btnExchange.className = "flex-1 py-2 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-300 transition-colors relative";
+                    viewQuestsWrapper.classList.remove('hidden');
+                    viewExchange.classList.add('hidden');
+                } else {
+                    btnExchange.className = "flex-1 py-2 text-sm font-bold border-b-2 border-indigo-500 text-indigo-400 transition-colors relative";
+                    btnQuests.className = "flex-1 py-2 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-300 transition-colors";
+                    viewExchange.classList.remove('hidden');
+                    viewQuestsWrapper.classList.add('hidden');
+                    renderInventory(); renderShop();
+                }
+            }
+
+            function checkAffordable() {
+                const canAfford = trades.some(t => inventory[t.costItem] >= t.costAmount);
+                if (canAfford) exchangeDot.classList.remove('hidden');
+                else exchangeDot.classList.add('hidden');
+            }
+
+            function renderInventory() {
+                const grid = document.getElementById('inventory-grid');
+                grid.innerHTML = '';
+                let hasItems = false;
+                for (const [item, count] of Object.entries(inventory)) {
+                    if (count > 0) {
+                        hasItems = true;
+                        const rData = rewards.find(r => r.text === item);
+                        const colorClass = rData && rData.rarity === 'legendary' ? 'border-yellow-500 text-yellow-500' : 
+                                          (rData && rData.rarity === 'rare' ? 'border-blue-500 text-blue-400' : 'border-slate-600 text-slate-300');
+                        grid.insertAdjacentHTML('beforeend', `
+                            <div class="bg-slate-800/50 border ${colorClass} rounded-lg p-2 text-center relative mt-2 flex flex-col justify-between">
+                                <div>
+                                    <span class="absolute -top-3 -right-2 bg-indigo-600 text-white text-xs font-black w-6 h-6 rounded-full flex items-center justify-center border-2 border-slate-900 shadow-md">${count}</span>
+                                    <span class="text-xs font-semibold block mt-1">${item}</span>
+                                </div>
+                                <button onclick="window.useItem('${item}')" class="mt-2 w-full bg-slate-700 hover:bg-indigo-500 text-white text-[10px] font-bold py-1.5 rounded transition-colors uppercase tracking-wider">Use</button>
+                            </div>
+                        `);
+                    }
+                }
+                if (!hasItems) grid.innerHTML = '<p class="text-sm text-slate-500 italic col-span-2 text-center py-4">Inventory is empty. Spin the wheel!</p>';
+            }
+
+            function renderShop() {
+                const list = document.getElementById('shop-list');
+                list.innerHTML = '';
+                trades.forEach(trade => {
+                    const currentAmount = inventory[trade.costItem] || 0;
+                    const canAfford = currentAmount >= trade.costAmount;
+                    const rData = rewards.find(r => r.text === trade.rewardItem);
+                    const isLegendary = rData && rData.rarity === 'legendary';
+                    list.insertAdjacentHTML('beforeend', `
+                        <div class="bg-slate-800/80 border border-slate-700 p-3 rounded-xl flex flex-col gap-2">
+                            <div class="flex justify-between items-center text-sm">
+                                <span class="text-slate-400 line-through decoration-red-500/50">${trade.costAmount}x ${trade.costItem}</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
+                                <span class="font-bold ${isLegendary ? 'text-yellow-500 drop-shadow-md' : 'text-blue-400'}">1x ${trade.rewardItem}</span>
+                            </div>
+                            <div class="flex justify-between items-center mt-1">
+                                <span class="text-xs font-semibold ${canAfford ? 'text-green-400' : 'text-slate-500'}">You have: ${currentAmount}</span>
+                                <button onclick="window.executeTrade(${trade.id})" class="px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${canAfford ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/30' : 'bg-slate-700 text-slate-500 cursor-not-allowed'}" ${!canAfford ? 'disabled' : ''}>Trade</button>
+                            </div>
+                        </div>
+                    `);
+                });
+            }
+
+            window.executeTrade = function(id) {
+                const trade = trades.find(t => t.id === id);
+                if (trade && inventory[trade.costItem] >= trade.costAmount) {
+                    inventory[trade.costItem] -= trade.costAmount;
+                    inventory[trade.rewardItem] = (inventory[trade.rewardItem] || 0) + 1;
+                    saveData(); renderInventory(); renderShop(); checkAffordable();
+                    playWin();
+                    rewardHeader.innerText = "Exchange Successful!";
+                    multiRewardList.classList.add('hidden');
+                    rewardText.innerText = trade.rewardItem;
+                    rewardText.className = 'text-3xl font-black mb-1 text-green-400';
+                    rewardRarityText.innerText = 'ADDED TO INVENTORY';
+                    rewardRarityText.className = 'text-xs uppercase tracking-widest mb-8 font-bold text-green-400';
+                    modalCloseBtn.innerText = "Awesome!"; modal.classList.remove('hidden'); createConfetti();
+                }
+            }
+
+            window.useItem = function(itemName) {
+                if (inventory[itemName] && inventory[itemName] > 0) {
+                    playClick(); inventory[itemName]--;
+                    saveData(); renderInventory(); renderShop(); checkAffordable();
+                    rewardHeader.innerText = "Item Consumed!";
+                    multiRewardList.classList.add('hidden');
+                    rewardText.innerText = itemName;
+                    rewardText.className = 'text-3xl font-black mb-1 text-white';
+                    rewardRarityText.innerText = 'ENJOY YOUR REWARD!';
+                    rewardRarityText.className = 'text-xs uppercase tracking-widest mb-8 font-bold text-indigo-400';
+                    modalCloseBtn.innerText = "Close"; modal.classList.remove('hidden');
+                }
+            }
+
+            function renderQuests() {
+                questsContainer.innerHTML = '';
+                const selectedDateObj = new Date(selectedDateString);
+                const todayDateObj = new Date(todayDateString);
+                const isFuture = selectedDateObj > todayDateObj;
+                const isPast = selectedDateObj < todayDateObj;
+                questsContainer.insertAdjacentHTML('beforeend', `
+                    <div class="flex justify-between items-center mb-2 px-1">
+                        <h3 class="text-sm font-bold text-indigo-400">${selectedDateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</h3>
+                        ${isFuture ? '<span class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-1 rounded uppercase font-bold tracking-wider border border-indigo-500/30">Planning</span>' : ''}
+                        ${isPast ? '<span class="text-[10px] bg-red-500/20 text-red-400 px-2 py-1 rounded uppercase font-bold tracking-wider border border-red-500/30">Late Fines Active</span>' : ''}
+                    </div>
+                `);
+                const currentQuests = questsByDate[selectedDateString];
+                currentQuests.forEach(quest => {
+                    const earnedTokens = isPast ? Math.max(0, quest.tokens - getLateFine(quest)) : quest.tokens;
+                    const btnClass = quest.completed ? 'bg-black/20 text-slate-500 cursor-default' : (isFuture ? 'bg-black/20 text-slate-500 cursor-not-allowed opacity-50' : 'bg-black/40 hover:bg-black/60 cursor-pointer hover:scale-105 shadow-md shadow-indigo-500/10');
+                    questsContainer.insertAdjacentHTML('beforeend', `
+                        <div id="quest-${quest.id}" class="quest-card p-4 rounded-xl flex flex-col gap-3 transition-all ${quest.isBoss ? "border-yellow-500/30" : ""} ${quest.completed ? 'completed' : ''}">
+                            <div class="flex justify-between items-center">
+                                <div class="flex items-center gap-2">
+                                    <p class="font-semibold ${quest.isBoss ? "text-yellow-500" : ""} ${quest.completed ? 'line-through text-slate-400' : ''}">${quest.title}</p>
+                                    ${quest.completed ? '<span class="bg-green-500/20 text-green-400 text-[10px] px-2 py-0.5 rounded">DONE</span>' : ''}
+                                </div>
+                                <button onclick="${(quest.completed || isFuture) ? '' : `window.completeQuest(${quest.id})`}" class="${quest.isBoss ? "text-yellow-500" : "text-indigo-400"} font-bold text-sm px-3 py-1.5 rounded-lg flex items-center gap-1 ${btnClass} transition-all">
+                                    ${isPast ? `<span class="line-through text-slate-500 opacity-70 mr-0.5 text-xs">${quest.tokens}</span>` : ''} +${earnedTokens} <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9 9a1 1 0 112 0v1a1 1 0 11-2 0V9zm1-7a1 1 0 00-1 1v.17a6.993 6.993 0 00-3.93 2.108 1 1 0 101.46 1.354 4.993 4.993 0 013.47-1.462V7a1 1 0 002 0V5.17a6.993 6.993 0 003.93-2.108 1 1 0 10-1.46-1.354 4.993 4.993 0 01-3.47 1.462V3a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+                                </button>
+                            </div>
+                            <input type="text" value="${quest.userInput || ''}" oninput="window.updateQuestText(${quest.id}, this.value)" placeholder="E.g., ${quest.desc}" class="w-full bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-slate-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none transition-all ${quest.completed ? 'opacity-50' : ''}" ${quest.completed ? 'disabled' : ''} />
+                        </div>
+                    `);
+                });
+            }
+
+            window.updateQuestText = function(id, val) {
+                const quest = questsByDate[selectedDateString].find(q => q.id === id);
+                if(quest) { quest.userInput = val; saveData(); }
+            }
+
+            window.completeQuest = function(id) {
+                const quest = questsByDate[selectedDateString].find(q => q.id === id);
+                if(quest && !quest.completed) {
+                    playClick(); quest.completed = true;
+                    const isPast = new Date(selectedDateString) < new Date(todayDateString);
+                    tokens += isPast ? Math.max(0, quest.tokens - getLateFine(quest)) : quest.tokens;
+                    
+                    updateStreakAction(); // Completing quests also adds to streak
+                    updateTokenDisplay(); 
+                    saveData(); 
+                    
+                    document.getElementById(`quest-${id}`).style.transform = 'scale(0.97)';
+                    setTimeout(() => renderQuests(), 150);
+                    updateButton();
+                }
+            }
+
+            function updateButton() {
+                spinBtn.disabled = tokens <= 0 || isSpinning;
+                if (tokens > 0 && !isSpinning) spinBtn.classList.add('pulse-active');
+                else spinBtn.classList.remove('pulse-active');
+                if (tokens > 1) {
+                    spinAllBtn.classList.remove('hidden');
+                    spinAllBtn.innerText = `Spin All (${Math.floor(tokens)}x)`;
+                    spinAllBtn.disabled = isSpinning;
+                } else spinAllBtn.classList.add('hidden');
+                if (isSpinning) document.getElementById('status-msg').innerText = "Spinning...";
+                else if (tokens > 0) document.getElementById('status-msg').innerHTML = `<span class="text-indigo-400">Ready to pull! You have ${Number.isInteger(tokens) ? tokens : tokens.toFixed(1)} token${tokens !== 1 ? 's' : ''}.</span>`;
+                else document.getElementById('status-msg').innerText = "Complete daily quests to earn tokens!";
+            }
+
+            function getWeightedRandomReward() {
+                const totalWeight = rewards.reduce((sum, r) => sum + r.weight, 0);
+                let r = Math.random() * totalWeight;
+                for (let reward of rewards) { if (r < reward.weight) return reward; r -= reward.weight; }
+                return rewards[0];
+            }
+
+            function drawWheel() {
+                const totalWeight = rewards.reduce((sum, r) => sum + r.weight, 0);
+                let currentAngle = 0;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                rewards.forEach((reward) => {
+                    const sliceAngle = (reward.weight / totalWeight) * 2 * Math.PI;
+                    ctx.beginPath(); ctx.fillStyle = reward.color; ctx.moveTo(200, 200); ctx.arc(200, 200, 190, currentAngle, currentAngle + sliceAngle); ctx.fill();
+                    ctx.strokeStyle = "rgba(255,255,255,0.05)"; ctx.lineWidth = 1; ctx.stroke();
+                    ctx.save(); ctx.translate(200, 200); ctx.rotate(currentAngle + sliceAngle / 2); ctx.textAlign = "right"; ctx.fillStyle = "white";
+                    ctx.font = `bold ${reward.weight <= 5 ? 11 : 14}px Poppins`; ctx.fillText(reward.text, 170, 5); ctx.restore();
+                    currentAngle += sliceAngle;
+                });
+                ctx.beginPath(); ctx.fillStyle = "#0f172a"; ctx.arc(200, 200, 35, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.strokeStyle = "#4f46e5"; ctx.lineWidth = 6; ctx.arc(200, 200, 35, 0, Math.PI * 2); ctx.stroke();
+                ctx.beginPath(); ctx.fillStyle = "#818cf8"; ctx.arc(200, 200, 15, 0, Math.PI * 2); ctx.fill();
+            }
+
+            function spin() {
+                if (tokens <= 0 || isSpinning) return;
+                initAudio(); tokens--; updateTokenDisplay(); isSpinning = true; saveData(); updateButton();
+                const spinAngle = (5 + Math.random() * 5) * 360;
+                currentRotation += spinAngle;
+                canvas.style.transform = `rotate(${currentRotation}deg)`;
+                simulateWheelTicks(4000); 
+                setTimeout(() => {
+                    isSpinning = false;
+                    const actualDeg = currentRotation % 360;
+                    const pointerAngleOnCanvas = (270 - actualDeg + 360) % 360;
+                    const totalWeight = rewards.reduce((sum, r) => sum + r.weight, 0);
+                    let currentAngle = 0, winningIndex = 0;
+                    for (let i = 0; i < rewards.length; i++) {
+                        const sliceAngle = (rewards[i].weight / totalWeight) * 360;
+                        if (pointerAngleOnCanvas >= currentAngle && pointerAngleOnCanvas < currentAngle + sliceAngle) { winningIndex = i; break; }
+                        currentAngle += sliceAngle;
+                    }
+                    const wonItem = rewards[winningIndex];
+                    inventory[wonItem.text] = (inventory[wonItem.text] || 0) + 1;
+                    saveData(); renderInventory(); renderShop(); checkAffordable();
+                    showResult(wonItem); 
+                    updateButton();
+                }, 4000); 
+            }
+
+            function spinAll() {
+                if (tokens <= 1 || isSpinning) return;
+                initAudio();
+                const pulls = Math.floor(tokens);
+                tokens -= pulls;
+                updateTokenDisplay(); isSpinning = true; saveData(); updateButton();
+                const spinAngle = (5 + Math.random() * 5) * 360;
+                currentRotation += spinAngle;
+                canvas.style.transform = `rotate(${currentRotation}deg)`;
+                simulateWheelTicks(4000);
+                setTimeout(() => {
+                    isSpinning = false;
+                    const actualDeg = currentRotation % 360;
+                    const pointerAngleOnCanvas = (270 - actualDeg + 360) % 360;
+                    const totalWeight = rewards.reduce((sum, r) => sum + r.weight, 0);
+                    let currentAngle = 0, winningIndex = 0;
+                    for (let i = 0; i < rewards.length; i++) {
+                        const sliceAngle = (rewards[i].weight / totalWeight) * 360;
+                        if (pointerAngleOnCanvas >= currentAngle && pointerAngleOnCanvas < currentAngle + sliceAngle) { winningIndex = i; break; }
+                        currentAngle += sliceAngle;
+                    }
+                    const visualWinner = rewards[winningIndex];
+                    let results = {};
+                    results[visualWinner.text] = { count: 1, rarity: visualWinner.rarity };
+                    inventory[visualWinner.text] = (inventory[visualWinner.text] || 0) + 1;
+                    for(let i = 1; i < pulls; i++) {
+                        const wonItem = getWeightedRandomReward();
+                        if(results[wonItem.text]) results[wonItem.text].count++;
+                        else results[wonItem.text] = { count: 1, rarity: wonItem.rarity };
+                        inventory[wonItem.text] = (inventory[wonItem.text] || 0) + 1;
+                    }
+                    saveData(); renderInventory(); renderShop(); checkAffordable();
+                    showMultiResult(pulls, results); 
+                    updateButton();
+                }, 4000);
+            }
+
+            function showResult(reward) {
+                if(reward.rarity === 'legendary') playLegendary(); else playWin();
+                rewardHeader.innerText = "Item Acquired!";
+                multiRewardList.classList.add('hidden');
+                modalCloseBtn.innerText = "Add to Inventory";
+                rewardText.innerText = reward.text;
+                rewardText.className = `text-4xl font-black mb-1 rarity-${reward.rarity}`;
+                rewardRarityText.innerText = `${reward.rarity.toUpperCase()} DROP`;
+                rewardRarityText.className = `text-xs uppercase tracking-widest mb-8 font-bold rarity-${reward.rarity}`;
+                modal.classList.remove('hidden');
+                if(reward.rarity !== 'common') createConfetti();
+            }
+
+            function showMultiResult(pulls, results) {
+                rewardHeader.innerText = "Multiple Items Acquired!";
+                rewardText.innerText = `x${pulls} PULLS`;
+                rewardText.className = `text-3xl font-black mb-1 text-white`;
+                rewardRarityText.innerText = `REWARDS SENT TO INVENTORY`;
+                rewardRarityText.className = `text-xs uppercase tracking-widest mb-4 font-bold text-slate-400`;
+                modalCloseBtn.innerText = "Add to Inventory";
+                multiRewardList.innerHTML = '';
+                multiRewardList.classList.remove('hidden');
+                let high = false, legendary = false;
+                for(const [name, data] of Object.entries(results)) {
+                    let colorClass = 'text-slate-300';
+                    if(data.rarity === 'rare') { colorClass = 'text-blue-400 font-bold'; high = true; }
+                    if(data.rarity === 'legendary') { colorClass = 'text-yellow-500 font-black'; high = true; legendary = true; }
+                    multiRewardList.insertAdjacentHTML('beforeend', `<div class="flex justify-between items-center py-1.5 border-b border-slate-700 last:border-0"><span class="${colorClass}">${name}</span><span class="bg-black/40 text-xs px-2 py-0.5 rounded font-bold text-slate-300">x${data.count}</span></div>`);
+                }
+                if(legendary) playLegendary(); else playWin();
+                modal.classList.remove('hidden'); if(high) createConfetti();
+            }
+
+            window.closeModal = function() { playClick(); modal.classList.add('hidden'); }
+
+            function createConfetti() {
+                for(let i=0; i<60; i++) {
+                    const conf = document.createElement('div');
+                    conf.className = 'confetti rounded-full';
+                    conf.style.left = Math.random() * 100 + 'vw';
+                    conf.style.backgroundColor = ['#f87171', '#60a5fa', '#facc15', '#a78bfa', '#34d399'][Math.floor(Math.random() * 5)];
+                    document.body.appendChild(conf);
+                    conf.animate([{ transform: 'translateY(0) rotate(0) scale(1)', opacity: 1 }, { transform: `translateY(100vh) rotate(${Math.random() * 720}deg) scale(${Math.random() * 1.5})`, opacity: 0 }], { duration: 2500 + Math.random() * 3000, easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)' }).onfinish = () => conf.remove();
+                }
+            }
+
+            spinBtn.addEventListener('click', spin);
+            spinAllBtn.addEventListener('click', () => { playClick(); spinAll(); });
+            
+            init();
+        });
+    </script>
+</body>
+</html>
